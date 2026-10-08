@@ -17,10 +17,14 @@ _UA = ("Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0")
 
 class Claude:
     def __init__(self, firefox_profile: str | os.PathLike | None = None,
-                 model: str | None = None, timeout: float = 120.0) -> None:
+                 model: str | None = None, timeout: float = 120.0,
+                 transport: str = "direct",
+                 profile_dir: str | os.PathLike | None = None) -> None:
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.model = model
         self.timeout = timeout
+        self.transport = transport
+        self.profile_dir = profile_dir
         self._cookie: str | None = None
         self._org: str | None = None
 
@@ -46,6 +50,14 @@ class Claude:
             raise RuntimeError(f"claude.ai {method} {path} -> {e.code}: {body}") from e
 
     def generate(self, prompt: str) -> str:
+        if self.transport == "browser":
+            import asyncio
+
+            from altlay.claude.browser import generate_browser
+
+            return asyncio.run(generate_browser(
+                prompt, profile_dir=self.profile_dir,
+                firefox_profile=self.firefox_profile, timeout=self.timeout))
         org = self._org_path()
         convo = {"uuid": str(uuid.uuid4()), "name": ""}
         if self.model:
@@ -92,5 +104,5 @@ def _last_active_org(cookies: list[dict]) -> str | None:
     return None
 
 
-def generate(prompt: str, **kwargs) -> str:
-    return Claude(**kwargs).generate(prompt)
+def generate(prompt: str, transport: str = "direct", **kwargs) -> str:
+    return Claude(transport=transport, **kwargs).generate(prompt)

@@ -80,6 +80,11 @@ Firefox UA is enough — no TLS impersonation, no Turnstile.
    concatenate `completion` fields until `stop_reason` is set.
 4. `DELETE .../chat_conversations/{id}` removes the run from history.
 
+`--headed` runs Claude in the visible browser instead (`/new` → composer
+`div[contenteditable="true"]` → `button[aria-label="Send message"]` →
+`[data-testid="assistant-message"]` last, done when the send button reads
+"Send message" again and text is stable; cleanup reuses the direct DELETE).
+
 ## Transport: stealth Chromium (CloakBrowser, visible window)
 
 - `launch_persistent_context(headless=False, humanize=True)` + `add_cookies()`

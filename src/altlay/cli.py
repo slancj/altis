@@ -16,6 +16,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--firefox-profile", default=None, help="source Firefox profile")
     p.add_argument("--timeout", type=float, default=300.0, help="generation timeout (s)")
     p.add_argument("--model", default=None, help="model override (claude)")
+    p.add_argument("--headed", action="store_true",
+                   help="claude: drive a visible browser window instead of direct HTTPS")
     return p
 
 
@@ -27,7 +29,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.backend == "claude":
         from altlay.claude import Claude
         print(Claude(firefox_profile=args.firefox_profile,
-                     model=args.model, timeout=args.timeout).generate(args.prompt))
+                     model=args.model, timeout=args.timeout,
+                     transport="browser" if args.headed else "direct",
+                     profile_dir=args.profile).generate(args.prompt))
     else:
         from altlay.chatgpt import ChatGPT
         answer = asyncio.run(ChatGPT(

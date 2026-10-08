@@ -24,11 +24,13 @@ Be signed into ChatGPT / Claude in Firefox, then:
 ```sh
 uv run altlay "Explain recursion in one sentence"
 uv run altlay --backend claude "Explain recursion in one sentence"
+uv run altlay --backend claude --headed "Explain recursion in one sentence"
 ```
 
 ChatGPT opens a browser window and sends the prompt as a temporary chat;
-Claude answers directly. The answer is printed in both cases. Browser profile
-persists at `~/.config/altlay/profile`.
+Claude answers over direct HTTPS unless `--headed` forces a visible window.
+The answer is printed in all cases. Browser profile persists at
+`~/.config/altlay/profile`.
 
 Env overrides: `ALTALAY_PROFILE` (browser profile dir),
 `ALTALAY_FIREFOX_PROFILE` (source Firefox profile).
