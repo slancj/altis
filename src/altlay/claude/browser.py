@@ -33,11 +33,12 @@ async def generate_browser(prompt: str,
                            profile_dir: str | os.PathLike | None = None,
                            firefox_profile: str | os.PathLike | None = None,
                            viewport: dict | None = None,
-                           timeout: float = 300.0) -> str:
+                           timeout: float = 300.0,
+                           headless: bool = False) -> str:
     profile = Path(profile_dir) if profile_dir else default_profile_dir()
     ff = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
     ctx = await launch_persistent_context_async(
-        profile, headless=False, humanize=True,
+        profile, headless=headless, humanize=True,
         viewport=viewport or {"width": 1280, "height": 900})
     try:
         await ctx.add_cookies(export_cookies(ff, domains=DOMAINS,

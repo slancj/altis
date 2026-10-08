@@ -19,12 +19,14 @@ class Claude:
     def __init__(self, firefox_profile: str | os.PathLike | None = None,
                  model: str | None = None, timeout: float = 120.0,
                  transport: str = "direct",
-                 profile_dir: str | os.PathLike | None = None) -> None:
+                 profile_dir: str | os.PathLike | None = None,
+                 headless: bool = False) -> None:
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.model = model
         self.timeout = timeout
         self.transport = transport
         self.profile_dir = profile_dir
+        self.headless = headless
         self._cookie: str | None = None
         self._org: str | None = None
 
@@ -57,7 +59,8 @@ class Claude:
 
             return asyncio.run(generate_browser(
                 prompt, profile_dir=self.profile_dir,
-                firefox_profile=self.firefox_profile, timeout=self.timeout))
+                firefox_profile=self.firefox_profile, timeout=self.timeout,
+                headless=self.headless))
         org = self._org_path()
         convo = {"uuid": str(uuid.uuid4()), "name": ""}
         if self.model:

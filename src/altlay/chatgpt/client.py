@@ -31,14 +31,16 @@ def default_profile_dir() -> Path:
 class ChatGPT:
     def __init__(self, profile_dir: str | os.PathLike | None = None,
                  firefox_profile: str | os.PathLike | None = None,
-                 viewport: dict | None = None) -> None:
+                 viewport: dict | None = None,
+                 headless: bool = False) -> None:
         self.profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.viewport = viewport or {"width": 1280, "height": 900}
+        self.headless = headless
 
     async def generate(self, prompt: str, timeout: float = 300.0) -> str:
         ctx = await launch_persistent_context_async(
-            self.profile_dir, headless=False, humanize=True, viewport=self.viewport)
+            self.profile_dir, headless=self.headless, humanize=True, viewport=self.viewport)
         try:
             await ctx.add_cookies(export_cookies(self.firefox_profile))
             page = await ctx.new_page()
