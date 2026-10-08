@@ -85,6 +85,35 @@ Firefox UA is enough — no TLS impersonation, no Turnstile.
 `[data-testid="assistant-message"]` last, done when the send button reads
 "Send message" again and text is stable; cleanup reuses the direct DELETE).
 
+## DeepSeek: direct HTTPS + proof-of-work (no browser needed)
+
+Auth is **localStorage**, not cookies: `userToken` (`{"value":"<64-char token>"}`)
+in Firefox `storage/default/https+++chat.deepseek.com*/ls/data.sqlite`
+(`moz_cookies` has nothing). Account here: `and*******216@gmail.com`
+(flatpak Firefox; two older sessions exist in the Zen profile — most-recent
+valid token wins). Plain stdlib `urllib` + Firefox UA suffices.
+
+1. `GET /api/v0/users/current` (Bearer) → identity check.
+2. `POST /api/v0/chat_session/create` `{}` → `{id}` (default model).
+3. `POST /api/v0/chat/create_pow_challenge` `{"target_path":
+   "/api/v0/chat/completion"}` → `{algorithm: "DeepSeekHashV1", challenge,
+   salt, signature, difficulty: 144000, expire_at (5 min)}`.
+4. Solve: `prefix = f"{salt}_{expire_at}_"`, find `nonce` in `[0, difficulty)`
+   with `DeepSeekHashV1(prefix + str(nonce)) == challenge`. DeepSeekHashV1 =
+   SHA3-256 with Keccak-f[1600] **round 0 skipped** (rounds 1..23 only);
+   pure-Python solver in `deepseek/pow.py` (~25 s, verified byte-identical
+   against a browser-captured answer). Header: `X-Ds-Pow-Response` =
+   base64(JSON `{algorithm, challenge, salt, answer, signature, target_path}`).
+5. `POST /api/v0/chat/completion` `{chat_session_id, parent_message_id: null,
+   prompt, ref_file_ids: [], thinking_enabled, search_enabled}` → JSON-patch
+   SSE: content arrives as `{"p":"response/fragments/-1/content","o":"APPEND",
+   "v":"<text>"}` with continuations as bare `{"v":"<text>"}`; short answers
+   arrive inline in the state snapshot (`v.response.fragments[].content`).
+6. `DELETE /api/v0/chat_session/{id}` removes the run from history.
+
+`--headed` seeds `userToken` into a visible Chromium profile and drives the UI
+(`textarea` composer → Enter → last assistant bubble, API DELETE after).
+
 ## Transport: stealth Chromium (CloakBrowser, visible window)
 
 - `launch_persistent_context(headless=False, humanize=True)` + `add_cookies()`
