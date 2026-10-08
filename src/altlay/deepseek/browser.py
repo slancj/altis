@@ -1,11 +1,14 @@
-"""DeepSeek in a visible stealth browser (the `--headed` path)."""
+"""DeepSeek in a visible stealth browser."""
 
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import os
 import time
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 from altlay.chatgpt import native
 
@@ -13,7 +16,7 @@ native.ensure_native_libs()
 
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
-from altlay.deepseek.storage import _read_value, _ls_candidates  # noqa: E402
+from altlay.deepseek.storage import find_session  # noqa: E402
 
 COMPOSER = "textarea"
 ANSWER_JS = """() => {
@@ -34,13 +37,25 @@ def default_profile_dir() -> Path:
     return Path.home() / ".config" / "altlay" / "profile"
 
 
-def _raw_user_token() -> str:
-    for db in _ls_candidates():
-        v = _read_value(db, "userToken")
-        if isinstance(v, dict) and v.get("value"):
-            import json as j
-            return j.dumps(v)
-    raise RuntimeError("no logged-in DeepSeek session found in browser profiles")
+def _raw_user_token(firefox_profile=None) -> str:
+    session = find_session(firefox_profile)
+    return _json.dumps({"value": session["userToken"], "__version": "0"})
+
+
+def _delete_conversation(firefox_profile, convo_id: str) -> None:
+    """Best-effort history cleanup (plain Bearer DELETE, no PoW needed)."""
+    try:
+        session = find_session(firefox_profile)
+        req = urllib.request.Request(
+            f"https://chat.deepseek.com/api/v0/chat_session/{convo_id}",
+            method="DELETE",
+            headers={"Authorization": f"Bearer {session['userToken']}",
+                     "Accept": "application/json",
+                     "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64; rv:140.0) "
+                                    "Gecko/20100101 Firefox/140.0")})
+        urllib.request.urlopen(req, timeout=30)
+    except Exception:
+        pass
 
 
 async def generate_browser(prompt: str,
@@ -49,7 +64,7 @@ async def generate_browser(prompt: str,
                            viewport: dict | None = None,
                            timeout: float = 300.0) -> str:
     profile = Path(profile_dir) if profile_dir else default_profile_dir()
-    raw_token = _raw_user_token()
+    raw_token = _raw_user_token(firefox_profile)
     ctx = await launch_persistent_context_async(
         profile, headless=False, humanize=True,
         viewport=viewport or {"width": 1280, "height": 900})
@@ -79,6 +94,12 @@ async def generate_browser(prompt: str,
             if cur != last_text:
                 last_text, stable_since = cur, time.time()
             if cur and time.time() - stable_since > 5:
+                try:
+                    convo = urlparse(page.url).path.rstrip("/").rsplit("/", 1)[-1]
+                    if convo not in ("", "chat.deepseek.com"):
+                        _delete_conversation(firefox_profile, convo)
+                except Exception:
+                    pass
                 return cur
         raise TimeoutError("generation did not finish in time")
     finally:

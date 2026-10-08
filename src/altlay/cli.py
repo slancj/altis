@@ -18,7 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=float, default=300.0, help="generation timeout (s)")
     p.add_argument("--model", default=None, help="model override (claude)")
     p.add_argument("--headed", action="store_true",
-                   help="claude/deepseek: drive a visible browser window instead of direct HTTPS")
+                   help="claude: drive a visible browser window instead of direct HTTPS "
+                        "(chatgpt/deepseek always use a visible browser)")
     return p
 
 
@@ -30,8 +31,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.backend == "deepseek":
         from altlay.deepseek import DeepSeek
         print(DeepSeek(firefox_profile=args.firefox_profile,
-                       model=args.model, timeout=args.timeout,
-                       transport="browser" if args.headed else "direct",
+                       timeout=args.timeout,
                        profile_dir=args.profile).generate(args.prompt))
     elif args.backend == "claude":
         from altlay.claude import Claude
