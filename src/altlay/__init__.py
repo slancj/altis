@@ -1,2 +1,4 @@
 def main() -> None:
-    print("Hello from altlay!")
+    from altlay.cli import main as cli_main
+
+    cli_main()

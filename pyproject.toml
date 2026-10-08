@@ -1,12 +1,14 @@
 [project]
 name = "altlay"
 version = "0.1.0"
-description = "Add your description here"
+description = "Generate text with ChatGPT's private web API via a stealth browser"
 authors = [
     { name = "TrueKing", email = "samuellance73@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "cloakbrowser>=0.6.0",
+]
 
 [project.scripts]
 altlay = "altlay:main"
