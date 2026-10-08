@@ -1,28 +1,34 @@
 # altlay
 
-Generate text with ChatGPT's private web API, using your existing Firefox
-login. Direct HTTP calls are blocked by Turnstile + proof-of-work + device
-checks, so `altlay` drives a visible stealth-Chromium window (CloakBrowser)
-with your session cookies imported. See `docs/RESEARCH.md` for the full
-reverse-engineering notes.
+Generate text with ChatGPT's and Claude's private web APIs, using your
+existing Firefox logins.
+
+- **Claude** (`--backend claude`): direct HTTPS, fast, no browser.
+- **ChatGPT** (default): direct HTTP is blocked by Turnstile + proof-of-work +
+  device checks, so `altlay` drives a visible stealth-Chromium window
+  (CloakBrowser) with your session cookies imported.
+
+See `docs/RESEARCH.md` for the full reverse-engineering notes.
 
 ## Setup
 
 ```sh
 uv sync
-uv run python -m cloakbrowser install   # one-time stealth-binary download
+uv run python -m cloakbrowser install   # one-time stealth-binary download (chatgpt)
 ```
 
 ## Use
 
-Be signed into ChatGPT in Firefox, then:
+Be signed into ChatGPT / Claude in Firefox, then:
 
 ```sh
 uv run altlay "Explain recursion in one sentence"
+uv run altlay --backend claude "Explain recursion in one sentence"
 ```
 
-A browser window opens, the prompt is sent as a temporary chat, and the
-answer is printed. Browser profile persists at `~/.config/altlay/profile`.
+ChatGPT opens a browser window and sends the prompt as a temporary chat;
+Claude answers directly. The answer is printed in both cases. Browser profile
+persists at `~/.config/altlay/profile`.
 
 Env overrides: `ALTALAY_PROFILE` (browser profile dir),
 `ALTALAY_FIREFOX_PROFILE` (source Firefox profile).

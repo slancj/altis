@@ -1,4 +1,4 @@
-# ChatGPT web-API reverse-engineering notes
+# ChatGPT + Claude web-API reverse-engineering notes
 
 How `altlay` generates text with a free ChatGPT account, and why it drives a
 real browser instead of calling HTTP directly. Verified Oct 2026.
@@ -64,6 +64,21 @@ Because `chat-requirements` returns, for this account:
 
 PoW alone is not enough; Turnstile + `so` tokens can't be minted headlessly
 without an arms race. So the transport is a genuine browser.
+
+## Claude: direct HTTPS works (no browser needed)
+
+Session cookies on `.claude.ai`: `sessionKey` (`sk-ant-sid...`), `lastActiveOrg`
+(org uuid), `anthropic-device-id`, `cf_clearance`. Plain stdlib `urllib` with a
+Firefox UA is enough — no TLS impersonation, no Turnstile.
+
+1. `GET /api/organizations` → org list; use `lastActiveOrg` cookie (else first).
+2. `POST /api/organizations/{org}/chat_conversations` `{"uuid","name":""}`
+   → `201 {uuid, model: "claude-sonnet-5-5", ...}`.
+3. `POST .../chat_conversations/{id}/completion`
+   `{"prompt","timezone","attachments":[],"files":[],"sync_sources":[]}` →
+   SSE `event: completion` / `data: {"completion":"<chunk>",...}` lines;
+   concatenate `completion` fields until `stop_reason` is set.
+4. `DELETE .../chat_conversations/{id}` removes the run from history.
 
 ## Transport: stealth Chromium (CloakBrowser, visible window)
 

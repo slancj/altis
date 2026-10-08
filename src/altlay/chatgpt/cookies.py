@@ -48,7 +48,10 @@ def find_firefox_profile() -> Path | None:
     return best
 
 
-def export_cookies(profile: str | os.PathLike | None = None) -> list[dict]:
+def export_cookies(profile: str | os.PathLike | None = None,
+                   domains: tuple[str, ...] = _WANTED,
+                   session_marker: str = "__Secure-next-auth.session-token.0",
+                   ) -> list[dict]:
     """Read Firefox cookies.sqlite (via a temp copy, lock-safe) and return
     a list of Playwright-format cookie dicts for ChatGPT/OpenAI domains."""
     if profile is None:
@@ -74,7 +77,7 @@ def export_cookies(profile: str | os.PathLike | None = None) -> list[dict]:
     out = []
     for host, name, value, path, expiry, secure, httponly, samesite in rows:
         domain = host.lstrip(".")
-        if not any(domain == w or domain.endswith("." + w) for w in _WANTED):
+        if not any(domain == w or domain.endswith("." + w) for w in domains):
             continue
         out.append({
             "name": name, "value": value, "domain": host, "path": path,
@@ -83,9 +86,13 @@ def export_cookies(profile: str | os.PathLike | None = None) -> list[dict]:
             "httpOnly": bool(httponly), "secure": bool(secure),
             "sameSite": _SAMESITE.get(samesite, "Lax"),
         })
-    if not any(c["name"] == "__Secure-next-auth.session-token.0" for c in out):
-        raise RuntimeError(f"no ChatGPT session cookie in {profile}")
+    if not any(c["name"] == session_marker for c in out):
+        raise RuntimeError(f"no session cookie {session_marker!r} in {profile}")
     return out
+
+
+def cookie_header(cookies: list[dict]) -> str:
+    return "; ".join(f"{c['name']}={c['value']}" for c in cookies)
 
 
 def main() -> None:  # `uv run altlay-cookies` debug helper
