@@ -155,6 +155,10 @@ def build_serve_parser() -> argparse.ArgumentParser:
 
 
 def serve(host: str = "127.0.0.1", port: int = 8734) -> None:
-    srv = ThreadingHTTPServer((host, port), Handler)
+    from altis import accounts as A
+    from altis.pool import vault_home
+    counts = {b: len(A.entries(b)) for b in A.BACKENDS}
     print(f"altis web UI on http://{host}:{port}")
+    print(f"vault {vault_home()}  accounts {counts}")
+    srv = ThreadingHTTPServer((host, port), Handler)
     srv.serve_forever()

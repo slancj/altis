@@ -11,7 +11,6 @@ from pathlib import Path
 COOLDOWN_FALLBACK = 3600.0  # 1h when a limit error carries no reset time
 
 LEGACY_HOME = Path.home() / ".config" / "altlay"
-OLD_LOCAL_HOME = Path.cwd() / ".altlay"
 
 
 def env(name: str) -> str | None:
@@ -20,21 +19,35 @@ def env(name: str) -> str | None:
 
 
 def vault_home() -> Path:
-    """Vault root: $ALTIS_HOME, else ./.altis in the working directory
-    (in-repo so accounts travel with the project; git-ignored)."""
+    """Vault root: $ALTIS_HOME, else the nearest ./.altis walking up from the
+    working directory (in-repo so accounts travel with the project;
+    git-ignored)."""
     custom = env("HOME")
     if custom:
         return Path(custom)
-    home = Path.cwd() / ".altis"
-    _migrate_legacy(home)
+    anchor = _find_anchor(Path.cwd())
+    home = anchor / ".altis"
+    _migrate_legacy(home, anchor)
     return home
 
 
-def _migrate_legacy(home: Path) -> None:
+def _find_anchor(start: Path) -> Path:
+    """Nearest ancestor (or self) holding a vault; else the start dir."""
+    cur = start
+    while True:
+        if (cur / ".altis").is_dir() or (cur / ".altlay").is_dir():
+            return cur
+        parent = cur.parent
+        if parent == cur:
+            return start
+        cur = parent
+
+
+def _migrate_legacy(home: Path, anchor: Path) -> None:
     """One-time move from the old locations (~/.config/altlay, ./.altlay)."""
     if home.exists():
         return
-    for old in (OLD_LOCAL_HOME, LEGACY_HOME):
+    for old in (anchor / ".altlay", LEGACY_HOME):
         if old.exists():
             try:
                 import shutil
