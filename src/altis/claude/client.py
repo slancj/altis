@@ -9,7 +9,8 @@ import urllib.error
 import urllib.request
 import uuid
 
-from altlay.chatgpt.cookies import cookie_header, export_cookies
+from altis.chatgpt.cookies import cookie_header, export_cookies
+from altis.pool import env as _getenv
 
 BASE = "https://claude.ai"
 _DOMAINS = ("claude.ai", "anthropic.com")
@@ -23,7 +24,7 @@ class Claude:
                  profile_dir: str | os.PathLike | None = None,
                  headless: bool = False, stream: bool = False,
                  session: dict | None = None) -> None:
-        self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
+        self.firefox_profile = firefox_profile or _getenv("FIREFOX_PROFILE")
         self.model = model
         self.timeout = timeout
         self.transport = transport
@@ -64,7 +65,7 @@ class Claude:
         if self.transport == "browser":
             import asyncio
 
-            from altlay.claude.browser import generate_browser
+            from altis.claude.browser import generate_browser
 
             return asyncio.run(generate_browser(
                 prompt, profile_dir=self.profile_dir,
@@ -114,7 +115,7 @@ class Claude:
 
 def _raise_if_over_limit(chunk: dict) -> None:
     """200-OK payloads can still report an exhausted quota."""
-    from altlay.pool import RateLimited, parse_reset_time
+    from altis.pool import RateLimited, parse_reset_time
     ml = chunk.get("messageLimit") or {}
     status = str(ml.get("type", "") or "")
     if status and status != "within_limit":
@@ -138,7 +139,7 @@ def _last_active_org(cookies: list[dict]) -> str | None:
 
 
 def _as_pool_error(code: int, body: str, method: str, path: str) -> Exception:
-    from altlay.pool import AccountDead, RateLimited, parse_reset_time
+    from altis.pool import AccountDead, RateLimited, parse_reset_time
     lowered = body.lower()
     if code in (401, 403) and ("unauthorized" in lowered or "invalid" in lowered
                                or "session" in lowered or "login" in lowered):

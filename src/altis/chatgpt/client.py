@@ -8,15 +8,15 @@ import re
 import time
 from pathlib import Path
 
-from altlay.chatgpt import native
+from altis.chatgpt import native
 
 native.ensure_native_libs()
 
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
-from altlay.chatgpt.cookies import export_cookies  # noqa: E402
-from altlay.pool import AccountDead, RateLimited, parse_reset_time  # noqa: E402
-from altlay.ui import (  # noqa: E402
+from altis.chatgpt.cookies import export_cookies  # noqa: E402
+from altis.pool import AccountDead, RateLimited, env as _getenv, parse_reset_time  # noqa: E402
+from altis.ui import (  # noqa: E402
     Streamer,
     arm_overlay_handlers,
     disarm_overlay_handlers,
@@ -32,10 +32,10 @@ ASSISTANT = '[data-message-author-role="assistant"]'
 
 
 def default_profile_dir() -> Path:
-    env = os.environ.get("ALTALAY_PROFILE")
+    env = _getenv("PROFILE")
     if env:
         return Path(env)
-    from altlay.pool import vault_home
+    from altis.pool import vault_home
     return vault_home() / "profile"
 
 
@@ -47,7 +47,7 @@ class ChatGPT:
                  session: dict | None = None,
                  account_name: str | None = None) -> None:
         self.profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
-        self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
+        self.firefox_profile = firefox_profile or _getenv("FIREFOX_PROFILE")
         self.viewport = viewport or {"width": 1280, "height": 900}
         self.headless = headless
         self.session = session
@@ -150,7 +150,7 @@ async def _heal_or_die(page, ctx, account_name: str | None) -> None:
     import sys
     if account_name is None or not sys.stdin.isatty():
         raise AccountDead("session expired (re-login needs a terminal)") from None
-    print(f"[altlay] {account_name}: session expired — log in again in the "
+    print(f"[altis] {account_name}: session expired — log in again in the "
           f"browser window, then press Enter here. (Ctrl-C aborts)",
           flush=True)
     try:
@@ -160,15 +160,15 @@ async def _heal_or_die(page, ctx, account_name: str | None) -> None:
     if await _modal_present(page):
         raise AccountDead("still expired after re-login") from None
     try:
-        from altlay.accounts import update_session
+        from altis.accounts import update_session
         cookies = [c for c in await ctx.cookies()
                    if c["domain"].endswith("chatgpt.com")
                    or c["domain"].endswith("openai.com")]
         if cookies:
             update_session("chatgpt", account_name, {"cookies": cookies})
-            print("[altlay] vault entry refreshed", flush=True)
+            print("[altis] vault entry refreshed", flush=True)
     except Exception as e:
-        print(f"[altlay] vault refresh failed: {e}", flush=True)
+        print(f"[altis] vault refresh failed: {e}", flush=True)
 
 
 async def _raise_if_limited(page) -> None:

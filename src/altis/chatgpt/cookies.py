@@ -9,6 +9,8 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+from altis.pool import env as _getenv
+
 # Firefox moz_cookies.sameSite -> Playwright sameSite
 _SAMESITE = {0: "None", 1: "Lax", 2: "Strict", 256: "Lax"}
 
@@ -61,7 +63,7 @@ def export_cookies(profile: str | os.PathLike | None = None,
         profile = found
     profile = Path(profile)
     db = profile / "cookies.sqlite" if (profile / "cookies.sqlite").exists() else profile
-    tmpdir = Path(tempfile.mkdtemp(prefix="altlay-ck"))
+    tmpdir = Path(tempfile.mkdtemp(prefix="altis-ck"))
     for suffix in ("", "-wal", "-shm"):
         src = Path(str(db) + suffix)
         if src.exists():
@@ -95,7 +97,7 @@ def cookie_header(cookies: list[dict]) -> str:
     return "; ".join(f"{c['name']}={c['value']}" for c in cookies)
 
 
-def main() -> None:  # `uv run altlay-cookies` debug helper
-    cookies = export_cookies(os.environ.get("ALTALAY_FIREFOX_PROFILE"))
+def main() -> None:  # `uv run altis-cookies` debug helper
+    cookies = export_cookies(_getenv("FIREFOX_PROFILE"))
     print(json.dumps({"count": len(cookies),
                       "names": sorted({c["name"] for c in cookies})}, indent=1))

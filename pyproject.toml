@@ -1,5 +1,5 @@
 [project]
-name = "altlay"
+name = "altis"
 version = "0.1.0"
 description = "Generate text with ChatGPT's private web API via a stealth browser"
 authors = [
@@ -12,7 +12,8 @@ dependencies = [
 ]
 
 [project.scripts]
-altlay = "altlay:main"
+altis = "altis:main"
+altlay = "altis:main"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]

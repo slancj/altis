@@ -11,15 +11,15 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from altlay.chatgpt import native
+from altis.chatgpt import native
 
 native.ensure_native_libs()
 
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
-from altlay.deepseek.storage import find_session  # noqa: E402
-from altlay.pool import RateLimited, parse_reset_time  # noqa: E402
-from altlay.ui import (  # noqa: E402
+from altis.deepseek.storage import find_session  # noqa: E402
+from altis.pool import RateLimited, env as _getenv, parse_reset_time  # noqa: E402
+from altis.ui import (  # noqa: E402
     Streamer,
     arm_overlay_handlers,
     disarm_overlay_handlers,
@@ -43,10 +43,10 @@ ANSWER_JS = """() => {
 
 
 def default_profile_dir() -> Path:
-    env = os.environ.get("ALTALAY_PROFILE")
+    env = _getenv("PROFILE")
     if env:
         return Path(env)
-    from altlay.pool import vault_home
+    from altis.pool import vault_home
     return vault_home() / "profile"
 
 

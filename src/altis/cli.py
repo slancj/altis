@@ -1,4 +1,4 @@
-"""`altlay [--backend B] [--account A] "prompt"` — print the answer (with failover)."""
+"""`altis [--backend B] [--account A] "prompt"` — print the answer (with failover)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="altlay", description=__doc__)
+    p = argparse.ArgumentParser(prog="altis", description=__doc__)
     p.add_argument("prompt", nargs="?", help="prompt to send")
     p.add_argument("--backend", choices=("chatgpt", "claude", "deepseek"),
                    default="chatgpt",
@@ -31,10 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def build_accounts_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="altlay accounts")
+    p = argparse.ArgumentParser(prog="altis accounts")
     sub = p.add_subparsers(dest="action", required=True)
 
-    add = sub.add_parser("add", help="add an account (you hand it over, altlay files it)")
+    add = sub.add_parser("add", help="add an account (you hand it over, altis files it)")
     add.add_argument("backend", nargs="?", choices=("chatgpt", "claude", "deepseek"))
     add.add_argument("name", nargs="?", help="alias (default: from email)")
     add.add_argument("--from-firefox", action="store_true",
@@ -73,7 +73,7 @@ def profile_for(backend: str, name: str | None, override: str | None) -> str | N
         return override
     if name is None:
         return None  # legacy shared-profile default
-    from altlay.pool import vault_home
+    from altis.pool import vault_home
     return str(vault_home() / "profiles" / backend / name)
 
 
@@ -86,15 +86,15 @@ def build_attempt(backend: str, args):
         kwargs = {"firefox_profile": args.firefox_profile,
                   "profile_dir": profile, "headless": headless}
         if backend == "chatgpt":
-            from altlay.chatgpt import ChatGPT
-            print(f"[altlay] {backend}/{name}", file=sys.stderr, flush=True)
+            from altis.chatgpt import ChatGPT
+            print(f"[altis] {backend}/{name}", file=sys.stderr, flush=True)
             return asyncio.run(ChatGPT(session=entry, account_name=name,
                                        **kwargs).generate(
                 args.prompt, timeout=timeout, stream=True))
         if backend == "claude":
-            from altlay.claude import Claude
+            from altis.claude import Claude
             use_browser = args.headed or args.headless
-            print(f"[altlay] {backend}/{name}"
+            print(f"[altis] {backend}/{name}"
                   + ("" if use_browser else " (direct)"),
                   file=sys.stderr, flush=True)
             answer = Claude(session=entry, model=args.model, timeout=timeout,
@@ -105,8 +105,8 @@ def build_attempt(backend: str, args):
             if not use_browser:
                 print(answer)
             return answer
-        from altlay.deepseek import DeepSeek
-        print(f"[altlay] {backend}/{name}", file=sys.stderr, flush=True)
+        from altis.deepseek import DeepSeek
+        print(f"[altis] {backend}/{name}", file=sys.stderr, flush=True)
         return DeepSeek(session=entry, timeout=timeout, headless=headless,
                         profile_dir=profile,
                         firefox_profile=args.firefox_profile,
@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> None:
         accounts_main(build_accounts_parser().parse_args(raw[1:]))
         return
     if raw and raw[0] == "serve":
-        from altlay.web import build_serve_parser, serve
+        from altis.web import build_serve_parser, serve
         sargs = build_serve_parser().parse_args(raw[1:])
         serve(sargs.host, sargs.port)
         return
@@ -129,8 +129,8 @@ def main(argv: list[str] | None = None) -> None:
         build_parser().print_help()
         raise SystemExit(2)
     backend = args.backend
-    from altlay.accounts import resolve_name
-    from altlay.pool import AccountPool, AllLimited
+    from altis.accounts import resolve_name
+    from altis.pool import AccountPool, AllLimited
     pool = AccountPool(backend)
     if not pool.names():
         legacy_main(backend, args)  # no vault yet: old live-discovery behavior
@@ -151,13 +151,13 @@ def main(argv: list[str] | None = None) -> None:
 def legacy_main(backend: str, args) -> None:
     """Pre-vault behavior: live Firefox discovery, shared profile."""
     if backend == "chatgpt":
-        from altlay.chatgpt import ChatGPT
+        from altis.chatgpt import ChatGPT
         asyncio.run(ChatGPT(
             profile_dir=args.profile, firefox_profile=args.firefox_profile,
             headless=args.headless,
         ).generate(args.prompt, timeout=args.timeout, stream=True))
     elif backend == "claude":
-        from altlay.claude import Claude
+        from altis.claude import Claude
         use_browser = args.headed or args.headless
         answer = Claude(firefox_profile=args.firefox_profile,
                         model=args.model, timeout=args.timeout,
@@ -167,18 +167,18 @@ def legacy_main(backend: str, args) -> None:
         if not use_browser:
             print(answer)
     else:
-        from altlay.deepseek import DeepSeek
+        from altis.deepseek import DeepSeek
         DeepSeek(firefox_profile=args.firefox_profile, timeout=args.timeout,
                  headless=args.headless, profile_dir=args.profile,
                  stream=True).generate(args.prompt)
 
 
 def accounts_main(args) -> None:
-    from altlay import accounts as A
+    from altis import accounts as A
     action = args.action
     if action == "list":
         backends = [args.backend] if getattr(args, "backend", None) else list(A.BACKENDS)
-        from altlay.pool import load_state
+        from altis.pool import load_state
         state = load_state()
         import time as _t
         for b in backends:
@@ -197,7 +197,7 @@ def accounts_main(args) -> None:
         accounts_add(args)
         return
     if action == "remove":
-        from altlay import accounts as A
+        from altis import accounts as A
         doomed = [e for e in A.entries(args.backend) if e["name"] == args.name]
         A.remove_entry(args.backend, args.name)
         for e in doomed:
@@ -208,7 +208,7 @@ def accounts_main(args) -> None:
     if action == "rename":
         A.rename_entry(args.backend, args.old, args.new)
         import shutil
-        from altlay.pool import load_state, save_state, vault_home
+        from altis.pool import load_state, save_state, vault_home
         old_dir = vault_home() / "profiles" / args.backend / args.old
         new_dir = vault_home() / "profiles" / args.backend / args.new
         if old_dir.is_dir() and not new_dir.exists():
@@ -250,7 +250,7 @@ def accounts_main(args) -> None:
 
 
 def accounts_add(args) -> None:
-    from altlay import accounts as A
+    from altis import accounts as A
     if args.from_firefox:
         found = A.snapshot_firefox()
         if args.backend:
@@ -288,7 +288,7 @@ def _store_snapshot(args, item: dict) -> None:
 def upsert_snapshot(item: dict, name: str | None = None) -> str:
     """File a live snapshot: update the entry with the same email, else add.
     Ignored emails and anonymous dead sessions are skipped."""
-    from altlay import accounts as A
+    from altis import accounts as A
     backend = item["backend"]
     email = A.IDENTIFY[backend](item)
     if email and email in A.get_ignored():
@@ -326,7 +326,7 @@ def _session_material(item: dict) -> dict:
 
 
 def accounts_refresh(backends: list[str] | None = None) -> tuple[int, int]:
-    from altlay import accounts as A
+    from altis import accounts as A
     found = A.snapshot_firefox()
     upd = new = 0
     for item in found:
@@ -348,7 +348,7 @@ def _now_iso() -> str:
 
 
 def accounts_import(path: str) -> int:
-    from altlay import accounts as A
+    from altis import accounts as A
     data = json.load(open(path))
     n = 0
     for backend, items in data.items():

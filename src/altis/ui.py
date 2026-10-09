@@ -210,7 +210,7 @@ async def _click_turnstile(page) -> bool:
     import sys as _sys
     try:
         boxes = await _cdp_turnstile_boxes(page)
-        print(f"[altlay] turnstile candidates: {boxes}",
+        print(f"[altis] turnstile candidates: {boxes}",
               file=_sys.stderr, flush=True)
         box = next((b for b in boxes
                     if "challenges.cloudflare.com" in b["src"]
@@ -225,7 +225,7 @@ async def _click_turnstile(page) -> bool:
         if box is None:
             return False
         x, y = box["x"] + 28, box["y"] + box["height"] / 2
-        print(f"[altlay] turnstile click at ({x:.0f}, {y:.0f})",
+        print(f"[altis] turnstile click at ({x:.0f}, {y:.0f})",
               file=_sys.stderr, flush=True)
         await page.mouse.click(x, y)
         try:  # keyboard fallback
@@ -235,7 +235,7 @@ async def _click_turnstile(page) -> bool:
         except Exception:
             pass
         try:  # evidence snapshot (git-ignored debug dir)
-            from altlay.pool import vault_home
+            from altis.pool import vault_home
             dbg = vault_home() / "debug"
             dbg.mkdir(parents=True, exist_ok=True)
             await page.screenshot(path=str(dbg / "turnstile.png"))

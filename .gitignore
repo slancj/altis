@@ -4,4 +4,5 @@ __pycache__/
 uv.lock
 .DS_Store
 # local vault: sessions, browser profiles, cooldown state — never commit
+.altis/
 .altlay/

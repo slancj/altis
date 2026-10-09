@@ -1,6 +1,6 @@
 # ChatGPT + Claude web-API reverse-engineering notes
 
-How `altlay` generates text with a free ChatGPT account, and why it drives a
+How `altis` generates text with a free ChatGPT account, and why it drives a
 real browser instead of calling HTTP directly. Verified Oct 2026.
 
 ## Session source
@@ -131,7 +131,7 @@ signature, target_path}`).
 
 ## Account pool + failover (Alt + Relay)
 
-- Vault: `./.altlay/accounts.json` (user-owned sessions per backend),
+- Vault: `./.altis/accounts.json` (user-owned sessions per backend),
   `state.json` (runtime cooldowns — must persist, one-shot CLI can't rely on
   memory), `config.toml` (per-backend default alias). Fixed pool order,
   first healthy account answers; pinned `--account` is tried first but still

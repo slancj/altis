@@ -11,29 +11,38 @@ from pathlib import Path
 COOLDOWN_FALLBACK = 3600.0  # 1h when a limit error carries no reset time
 
 LEGACY_HOME = Path.home() / ".config" / "altlay"
+OLD_LOCAL_HOME = Path.cwd() / ".altlay"
+
+
+def env(name: str) -> str | None:
+    """ALTIS_* with ALTALAY_* fallback (pre-rebrand)."""
+    return os.environ.get(f"ALTIS_{name}") or os.environ.get(f"ALTALAY_{name}")
 
 
 def vault_home() -> Path:
-    """Vault root: $ALTALAY_HOME, else ./.altlay in the working directory
+    """Vault root: $ALTIS_HOME, else ./.altis in the working directory
     (in-repo so accounts travel with the project; git-ignored)."""
-    custom = os.environ.get("ALTALAY_HOME")
+    custom = env("HOME")
     if custom:
         return Path(custom)
-    home = Path.cwd() / ".altlay"
+    home = Path.cwd() / ".altis"
     _migrate_legacy(home)
     return home
 
 
 def _migrate_legacy(home: Path) -> None:
-    """One-time move from the old ~/.config/altlay location."""
-    if home.exists() or not LEGACY_HOME.exists():
+    """One-time move from the old locations (~/.config/altlay, ./.altlay)."""
+    if home.exists():
         return
-    try:
-        import shutil
-        shutil.move(str(LEGACY_HOME), str(home))
-        print(f"[altlay] moved vault {LEGACY_HOME} -> {home}", flush=True)
-    except OSError as e:
-        print(f"[altlay] vault migration failed: {e}", flush=True)
+    for old in (OLD_LOCAL_HOME, LEGACY_HOME):
+        if old.exists():
+            try:
+                import shutil
+                shutil.move(str(old), str(home))
+                print(f"[altis] moved vault {old} -> {home}", flush=True)
+            except OSError as e:
+                print(f"[altis] vault migration failed: {e}", flush=True)
+            return
 
 
 def _json_path(name: str) -> Path:

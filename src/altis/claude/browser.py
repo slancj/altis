@@ -9,15 +9,15 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from altlay.chatgpt import native
+from altis.chatgpt import native
 
 native.ensure_native_libs()
 
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
-from altlay.chatgpt.cookies import export_cookies  # noqa: E402
-from altlay.pool import RateLimited, parse_reset_time  # noqa: E402
-from altlay.ui import (  # noqa: E402
+from altis.chatgpt.cookies import export_cookies  # noqa: E402
+from altis.pool import RateLimited, env as _getenv, parse_reset_time  # noqa: E402
+from altis.ui import (  # noqa: E402
     Streamer,
     arm_overlay_handlers,
     disarm_overlay_handlers,
@@ -48,10 +48,10 @@ async def _raise_if_limited(page) -> None:
 
 
 def default_profile_dir() -> Path:
-    env = os.environ.get("ALTALAY_PROFILE")
+    env = _getenv("PROFILE")
     if env:
         return Path(env)
-    from altlay.pool import vault_home
+    from altis.pool import vault_home
     return vault_home() / "profile"
 
 
@@ -65,7 +65,7 @@ async def generate_browser(prompt: str,
                            session: dict | None = None) -> str:
     out = Streamer(stream)
     profile = Path(profile_dir) if profile_dir else default_profile_dir()
-    ff = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
+    ff = firefox_profile or _getenv("FIREFOX_PROFILE")
     ctx = await launch_persistent_context_async(
         profile, headless=headless, humanize=True,
         viewport=viewport or {"width": 1280, "height": 900})
@@ -118,7 +118,7 @@ async def generate_browser(prompt: str,
 
 def _delete_conversation(cookies: list[dict], convo_id: str) -> None:
     """Best-effort history cleanup via the direct API."""
-    from altlay.claude.client import Claude
+    from altis.claude.client import Claude
     client = Claude(session={"cookies": cookies})
     client._req("DELETE", f"/api/organizations/{client._org_path()}"
                           f"/chat_conversations/{convo_id}")

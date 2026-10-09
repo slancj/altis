@@ -5,9 +5,9 @@ import tempfile
 import time
 import unittest
 
-os.environ["ALTALAY_HOME"] = tempfile.mkdtemp(prefix="altlay-test")
+os.environ["ALTIS_HOME"] = tempfile.mkdtemp(prefix="altis-test")
 
-from altlay.pool import (  # noqa: E402
+from altis.pool import (  # noqa: E402
     AccountDead,
     AccountPool,
     AllLimited,
@@ -17,7 +17,7 @@ from altlay.pool import (  # noqa: E402
 
 
 def _seed():
-    from altlay.pool import _save_json
+    from altis.pool import _save_json
     _save_json("accounts.json", {"claude": [
         {"name": "a1", "cookies": []},
         {"name": "a2", "cookies": []},
@@ -49,7 +49,7 @@ class PoolTest(unittest.TestCase):
         self.assertEqual([a["name"] for a in pool.healthy()], ["a2"])
 
     def test_cooldown_expiry(self):
-        from altlay.pool import load_state, save_state
+        from altis.pool import load_state, save_state
         pool = AccountPool("claude")
         pool.mark_limited("a1", time.time() + 1000)
         self.assertEqual([a["name"] for a in pool.healthy()], ["a2"])
@@ -98,7 +98,7 @@ class PoolTest(unittest.TestCase):
 
 class AccountsTest(unittest.TestCase):
     def test_crud_and_defaults(self):
-        from altlay import accounts as A
+        from altis import accounts as A
         A.save_vault({})
         A.add_entry("claude", {"name": "x", "cookies": []})
         self.assertEqual([e["name"] for e in A.entries("claude")], ["x"])
@@ -114,7 +114,7 @@ class AccountsTest(unittest.TestCase):
         self.assertEqual(A.entries("claude"), [])
 
     def test_suggest_alias(self):
-        from altlay import accounts as A
+        from altis import accounts as A
         self.assertEqual(A.suggest_alias("Foo.Bar+1@gmail.com", [], "x"), "foobar+1")
         self.assertEqual(A.suggest_alias(None, [], "c9"), "c9")
         self.assertEqual(A.suggest_alias("a@b.c", ["a"], "x"), "a-2")

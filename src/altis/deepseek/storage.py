@@ -48,7 +48,7 @@ def _ls_candidates() -> list[Path]:
 
 
 def _read_value(db: Path, key: str):
-    tmp = Path(tempfile.mkdtemp(prefix="altlay-ds")) / "data.sqlite"
+    tmp = Path(tempfile.mkdtemp(prefix="altis-ds")) / "data.sqlite"
     shutil.copy(db, tmp)
     con = sqlite3.connect(f"file:{tmp}?mode=ro", uri=True)
     try:

@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 
-from altlay.deepseek.browser import generate_browser
+from altis.deepseek.browser import generate_browser
+from altis.pool import env as _getenv
 
 
 class DeepSeek:
@@ -14,7 +15,7 @@ class DeepSeek:
                  profile_dir: str | os.PathLike | None = None,
                  headless: bool = False, stream: bool = False,
                  session: dict | None = None) -> None:
-        self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
+        self.firefox_profile = firefox_profile or _getenv("FIREFOX_PROFILE")
         self.timeout = timeout
         self.profile_dir = profile_dir
         self.headless = headless

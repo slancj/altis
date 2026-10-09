@@ -1,4 +1,4 @@
-"""Bare-bones web UI: `altlay serve [--port N]`. Stdlib only."""
+"""Bare-bones web UI: `altis serve [--port N]`. Stdlib only."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from types import SimpleNamespace
 _BUSY = threading.Lock()
 
 PAGE = """<!doctype html>
-<html><head><meta charset="utf-8"><title>altlay</title>
+<html><head><meta charset="utf-8"><title>altis</title>
 <style>body{font-family:sans-serif;max-width:720px;margin:2em auto;padding:0 1em}
 textarea{width:100%;height:6em}pre{white-space:pre-wrap;background:#f4f4f4;padding:1em}
 .row{margin:.5em 0}</style></head><body>
-<h1>altlay</h1>
+<h1>altis</h1>
 <div class="row">backend <select id="b"></select>
 account <select id="a"><option value="">(default)</option></select>
 <label><input type="checkbox" id="h"> headless</label></div>
@@ -47,8 +47,8 @@ accts();
 
 
 def _answer(backend: str, account: str | None, prompt: str, headless: bool) -> tuple[str, str]:
-    from altlay.accounts import resolve_name
-    from altlay.pool import AccountPool
+    from altis.accounts import resolve_name
+    from altis.pool import AccountPool
     pool = AccountPool(backend)
     if not pool.names():
         raise RuntimeError(f"no {backend} accounts in vault")
@@ -72,24 +72,24 @@ def _answer(backend: str, account: str | None, prompt: str, headless: bool) -> t
 
 def _call_quiet(backend: str, args, name: str, entry: dict):
     import asyncio
-    from altlay.cli import profile_for
+    from altis.cli import profile_for
     profile = profile_for(backend, name, args.profile)
     kwargs = {"firefox_profile": args.firefox_profile,
               "profile_dir": profile, "headless": args.headless}
     if backend == "chatgpt":
-        from altlay.chatgpt import ChatGPT
+        from altis.chatgpt import ChatGPT
         return asyncio.run(ChatGPT(session=entry, account_name=name,
                                    **kwargs).generate(
             args.prompt, timeout=args.timeout, stream=False))
     if backend == "claude":
-        from altlay.claude import Claude
+        from altis.claude import Claude
         use_browser = args.headed or args.headless
         return Claude(session=entry, model=args.model, timeout=args.timeout,
                       transport="browser" if use_browser else "direct",
                       headless=args.headless, stream=False,
                       profile_dir=profile,
                       firefox_profile=args.firefox_profile).generate(args.prompt)
-    from altlay.deepseek import DeepSeek
+    from altis.deepseek import DeepSeek
     return DeepSeek(session=entry, timeout=args.timeout, headless=args.headless,
                     profile_dir=profile,
                     firefox_profile=args.firefox_profile,
@@ -110,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/accounts":
-            from altlay import accounts as A
+            from altis import accounts as A
             self._json({b: [e["name"] for e in A.entries(b)] for b in A.BACKENDS})
         elif self.path == "/":
             body = PAGE.encode()
@@ -148,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def build_serve_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="altlay serve")
+    p = argparse.ArgumentParser(prog="altis serve")
     p.add_argument("--port", type=int, default=8734)
     p.add_argument("--host", default="127.0.0.1")
     return p
@@ -156,5 +156,5 @@ def build_serve_parser() -> argparse.ArgumentParser:
 
 def serve(host: str = "127.0.0.1", port: int = 8734) -> None:
     srv = ThreadingHTTPServer((host, port), Handler)
-    print(f"altlay web UI on http://{host}:{port}")
+    print(f"altis web UI on http://{host}:{port}")
     srv.serve_forever()

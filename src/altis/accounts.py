@@ -1,4 +1,4 @@
-"""Account vault: you hand over accounts, altlay files them. Alt + Relay."""
+"""Account vault: you hand over accounts, altis files them. Alt + Relay."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from altlay.pool import _load_json, _save_json, vault_home
+from altis.pool import _load_json, _save_json, env as _getenv, vault_home
 
 BACKENDS = ("chatgpt", "claude", "deepseek")
 
@@ -160,7 +160,7 @@ def resolve_name(backend: str, pinned: str | None = None) -> str | None:
     """Explicit flag > env > config default. None = pool order decides."""
     if pinned:
         return pinned
-    env = os.environ.get("ALTALAY_ACCOUNT")
+    env = _getenv("ACCOUNT")
     if env:
         return env
     return get_default(backend)
@@ -185,7 +185,7 @@ def profile_roots() -> list[Path]:
 
 
 def _copy_db(path: Path) -> Path:
-    tmp = Path(tempfile.mkdtemp(prefix="altlay-acct")) / path.name
+    tmp = Path(tempfile.mkdtemp(prefix="altis-acct")) / path.name
     import shutil
     shutil.copy(path, tmp)
     wal = Path(str(path) + "-wal")
