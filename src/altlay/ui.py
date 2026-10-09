@@ -6,37 +6,57 @@ import asyncio
 
 
 async def fast_fill(page, selector: str, text: str) -> None:
-    """Insert text instantly via the editing pipeline (proper input events),
-    falling back to humanized fill if the app doesn't pick it up."""
-    await page.locator(selector).click()
+    """Paste the prompt in one shot. Never emits Enter keypresses, so a
+    multi-line prompt can't submit the composer mid-entry.
+
+    Never uses locator.fill/type: under cloakbrowser humanize those become
+    select-all + per-character typing, and each newline goes out as a real
+    Enter — submitting the prompt as several chat messages."""
+    await page.locator(selector).wait_for(state="visible", timeout=15000)
     await page.evaluate(
         """([sel, t]) => {
           const el = document.querySelector(sel);
           if (!el) return false;
           el.focus();
-          let ok = false;
-          try { ok = document.execCommand('insertText', false, t); } catch (e) {}
-          if (!ok) {
-            if ('value' in el) { el.value = t; }
-            else { el.textContent = t; }
-            el.dispatchEvent(new InputEvent('input',
-              {bubbles: true, data: t, inputType: 'insertText'}));
-          }
-          return true;
+          try { document.execCommand('selectAll', false, null); } catch (e) {}
+          try { return document.execCommand('insertText', false, t); }
+          catch (e) { return false; }
         }""",
         [selector, text])
+    await asyncio.sleep(0.3)
+    if await _contains(page, selector, text):
+        return
+    # The app reverted the synthetic insert (e.g. ProseMirror): commit the
+    # text via raw IME insertion — one shot, no key events, no submits.
+    await page.evaluate(
+        """([sel]) => {
+          const el = document.querySelector(sel);
+          if (!el) return;
+          el.focus();
+          try { document.execCommand('selectAll', false, null); } catch (e) {}
+        }""",
+        [selector])
+    original = getattr(page, "_original", None)
+    insert = getattr(original, "keyboard_insert_text", None) if original else None
+    if insert is None:
+        insert = page.keyboard.insert_text
+    await insert(text)
+    await asyncio.sleep(0.3)
     if not await _contains(page, selector, text):
-        await page.locator(selector).fill(text)
+        raise RuntimeError("prompt did not stick in composer")
 
 
 async def _contains(page, selector: str, text: str) -> bool:
+    """Whitespace-normalized: editors (ProseMirror) rewrap newlines as
+    paragraph breaks, so compare collapsed text."""
     try:
         loc = page.locator(selector)
         try:
             current = await loc.input_value()
         except Exception:
             current = await loc.inner_text()
-        return text in (current or "")
+        norm = lambda s: " ".join((s or "").split())
+        return norm(text) in norm(current)
     except Exception:
         return False
 
