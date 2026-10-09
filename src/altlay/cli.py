@@ -119,6 +119,11 @@ def main(argv: list[str] | None = None) -> None:
     if raw and raw[0] == "accounts":
         accounts_main(build_accounts_parser().parse_args(raw[1:]))
         return
+    if raw and raw[0] == "serve":
+        from altlay.web import build_serve_parser, serve
+        sargs = build_serve_parser().parse_args(raw[1:])
+        serve(sargs.host, sargs.port)
+        return
     args = build_parser().parse_args(raw)
     if not args.prompt:
         build_parser().print_help()
