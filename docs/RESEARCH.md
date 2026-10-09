@@ -113,14 +113,43 @@ byte-identical against a browser-captured answer);
 header `X-Ds-Pow-Response` = base64(JSON `{algorithm, challenge, salt, answer,
 signature, target_path}`).
 
-## Transport: stealth Chromium (CloakBrowser, visible window)
+## Transport: stealth Chromium (CloakBrowser, headed by default)
 
-- `launch_persistent_context(headless=False, humanize=True)` + `add_cookies()`
-  with the Firefox export → logged in, Turnstile/PoW/`so` handled by page JS.
+- `launch_persistent_context(headless/headless, humanize=True)` + injected
+  vault cookies / seeded DeepSeek `userToken` → logged in, Turnstile/PoW/`so`
+  handled by page JS.
 - `GET https://chatgpt.com/?temporary-chat=true` keeps runs out of history.
 - UI contract: composer `#prompt-textarea`, send `[data-testid="send-button"]`,
   streaming indicator `[data-testid="stop-button"]` (+ `stop-streaming-button`
   and `button[aria-label="Stop streaming"]` variants),
-  answers `[data-message-author-role="assistant"]` (take last, wait 4s stable).
+  answers `[data-message-author-role="assistant"]` (take last, 2.5s stable,
+  deltas streamed live to stdout).
+- Prompt entry: humanized per-character typing when headed (visible),
+  instant `execCommand('insertText')` paste when headless.
 - Free-tier note: no key needed for CloakBrowser's bundled v146 binary;
   `cloakbrowser login` unlocks the latest build (1 session free).
+
+## Account pool + failover (Alt + Relay)
+
+- Vault: `./.altlay/accounts.json` (user-owned sessions per backend),
+  `state.json` (runtime cooldowns — must persist, one-shot CLI can't rely on
+  memory), `config.toml` (per-backend default alias). Fixed pool order,
+  first healthy account answers; pinned `--account` is tried first but still
+  fails over silently. Unparsable limit = 1h bench; dead session = 24h bench;
+  stuck Cloudflare challenge = 5min bench.
+- Import: `--from-firefox` scans all profiles × all container partitions
+  (`originAttributes ^userContextId=N` for cookies, per-container
+  `storage/default` dirs for DeepSeek localStorage); `--token` pastes.
+- Limit signals: Claude direct — HTTP 429 or `messageLimit.type !=
+  within_limit` (`resetsAt` epoch) inside the SSE; ChatGPT/DeepSeek browser —
+  limit-notice text in page (`until 4:00 PM` → epoch), guarded so a genuine
+  essay about limits (long answer) never triggers it.
+- Cloudflare managed checkbox: the widget is a cross-origin iframe under
+  closed shadow DOM, so DOM piercing is unreliable — click the checkbox
+  geometrically (left edge, vertically centered in the iframe box) via raw CDP
+  `Input.dispatchMouseEvent` (instant, trusted). Overlay auto-dismissal via
+  `add_locator_handler` for cookie/upsell banners — never "Close"/"Done"
+  (ChatGPT's own UI has unclickable ones that hang the handler 30s+).
+- Each vault account gets its own Chromium profile dir
+  (`profiles/<backend>/<alias>/`); first launch warms Cloudflare clearance,
+  later runs reuse it.

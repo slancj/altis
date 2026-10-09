@@ -3,3 +3,5 @@ __pycache__/
 *.py[cod]
 uv.lock
 .DS_Store
+# local vault: sessions, browser profiles, cooldown state — never commit
+.altlay/

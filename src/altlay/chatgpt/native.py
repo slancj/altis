@@ -22,9 +22,14 @@ def ensure_native_libs() -> None:
 
 def _find_libstdcpp() -> list[str]:
     found: list[str] = []
+    import os
+    nix_ld = os.environ.get("NIX_LD_LIBRARY_PATH")
+    if nix_ld:
+        for d in nix_ld.split(":"):
+            found.extend(glob.glob(f"{d}/libstdc++.so.6"))
     for pattern in (
         "/nix/store/*-gcc-*-lib/lib/libstdc++.so.6",
-        "/run/current-system/sw/lib/libstdc++.so.6",
+        "/run/current-system/sw/share/nix-ld/lib/libstdc++.so.6",
         "/usr/lib/x86_64-linux-gnu/libstdc++.so.6",
         "/usr/lib/libstdc++.so.6",
     ):
@@ -32,7 +37,7 @@ def _find_libstdcpp() -> list[str]:
     cc = shutil.which("cc") or shutil.which("gcc")
     if cc:
         try:
-            p = subprocess.run([cc, "-print-file-name=libstdc++.so"],
+            p = subprocess.run([cc, "-print-file-name=libstdc++.so.6"],
                                capture_output=True, text=True, timeout=10)
             if p.stdout.strip().endswith(".so"):
                 found.append(p.stdout.strip())

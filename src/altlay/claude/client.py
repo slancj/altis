@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 import uuid
@@ -20,7 +21,8 @@ class Claude:
                  model: str | None = None, timeout: float = 120.0,
                  transport: str = "direct",
                  profile_dir: str | os.PathLike | None = None,
-                 headless: bool = False, stream: bool = False) -> None:
+                 headless: bool = False, stream: bool = False,
+                 session: dict | None = None) -> None:
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.model = model
         self.timeout = timeout
@@ -28,13 +30,19 @@ class Claude:
         self.profile_dir = profile_dir
         self.headless = headless
         self.stream = stream
+        self.session = session
         self._cookie: str | None = None
         self._org: str | None = None
 
+    def _cookies(self) -> list[dict]:
+        if self.session is not None:
+            return self.session["cookies"]
+        return export_cookies(self.firefox_profile, domains=_DOMAINS,
+                              session_marker="sessionKey")
+
     def _req(self, method: str, path: str, payload: dict | None = None) -> urllib.request.addinfourl:
         if self._cookie is None:
-            cookies = export_cookies(self.firefox_profile, domains=_DOMAINS,
-                                     session_marker="sessionKey")
+            cookies = self._cookies()
             self._cookie = cookie_header(cookies)
             orgs = json.load(self._req("GET", "/api/organizations"))
             self._org = next(o["uuid"] for o in orgs
@@ -49,8 +57,8 @@ class Claude:
         try:
             return urllib.request.urlopen(req, timeout=self.timeout)
         except urllib.error.HTTPError as e:
-            body = e.read().decode(errors="replace")[:500]
-            raise RuntimeError(f"claude.ai {method} {path} -> {e.code}: {body}") from e
+            body = e.read().decode(errors="replace")
+            raise _as_pool_error(e.code, body, method, path) from e
 
     def generate(self, prompt: str) -> str:
         if self.transport == "browser":
@@ -61,7 +69,8 @@ class Claude:
             return asyncio.run(generate_browser(
                 prompt, profile_dir=self.profile_dir,
                 firefox_profile=self.firefox_profile, timeout=self.timeout,
-                headless=self.headless, stream=self.stream))
+                headless=self.headless, stream=self.stream,
+                session={"cookies": self._cookies()}))
         org = self._org_path()
         convo = {"uuid": str(uuid.uuid4()), "name": ""}
         if self.model:
@@ -84,14 +93,16 @@ class Claude:
                     chunk = json.loads(line[len(data_prefix):])
                 except json.JSONDecodeError:
                     continue
-                if isinstance(chunk, dict) and chunk.get("completion"):
-                    parts.append(chunk["completion"])
+                if isinstance(chunk, dict):
+                    _raise_if_over_limit(chunk)
+                    if chunk.get("completion"):
+                        parts.append(chunk["completion"])
             return "".join(parts).strip()
         finally:
             try:
                 self._req("DELETE",
                           f"/api/organizations/{org}/chat_conversations/{convo_id}")
-            except RuntimeError:
+            except Exception:
                 pass
 
     def _org_path(self) -> str:
@@ -101,11 +112,45 @@ class Claude:
         return self._org
 
 
+def _raise_if_over_limit(chunk: dict) -> None:
+    """200-OK payloads can still report an exhausted quota."""
+    from altlay.pool import RateLimited, parse_reset_time
+    ml = chunk.get("messageLimit") or {}
+    status = str(ml.get("type", "") or "")
+    if status and status != "within_limit":
+        reset = None
+        try:
+            reset = float(ml.get("resetsAt") or 0) or None
+        except (TypeError, ValueError):
+            reset = None
+        if reset is None:
+            reset = parse_reset_time(json.dumps(chunk))
+        raise RateLimited(reset, f"claude quota: {status}")
+    if chunk.get("error", {}).get("type") == "over_limit":
+        raise RateLimited(parse_reset_time(json.dumps(chunk)), "claude over_limit")
+
+
 def _last_active_org(cookies: list[dict]) -> str | None:
     for c in cookies:
         if c["name"] == "lastActiveOrg":
             return c["value"]
     return None
+
+
+def _as_pool_error(code: int, body: str, method: str, path: str) -> Exception:
+    from altlay.pool import AccountDead, RateLimited, parse_reset_time
+    lowered = body.lower()
+    if code in (401, 403) and ("unauthorized" in lowered or "invalid" in lowered
+                               or "session" in lowered or "login" in lowered):
+        return AccountDead(f"claude.ai {method} {path} -> {code}")
+    if code == 429 or "rate" in lowered and "limit" in lowered or "over_limit" in lowered:
+        reset = parse_reset_time(body)
+        if reset is None:
+            m = re.search(r"resets?_?at['\"]?\s*[:=]\s*(\d{10})", body)
+            if m:
+                reset = float(m.group(1))
+        return RateLimited(reset, body[:300])
+    return RuntimeError(f"claude.ai {method} {path} -> {code}: {body[:500]}")
 
 
 def generate(prompt: str, transport: str = "direct", **kwargs) -> str:

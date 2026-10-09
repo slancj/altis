@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from pathlib import Path
 
@@ -14,7 +15,14 @@ native.ensure_native_libs()
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
 from altlay.chatgpt.cookies import export_cookies  # noqa: E402
-from altlay.ui import Streamer, fast_fill  # noqa: E402
+from altlay.pool import AccountDead, RateLimited, parse_reset_time  # noqa: E402
+from altlay.ui import (  # noqa: E402
+    Streamer,
+    arm_overlay_handlers,
+    disarm_overlay_handlers,
+    enter_prompt,
+    wait_for_composer,
+)
 
 COMPOSER = "#prompt-textarea"
 SEND = '[data-testid="send-button"]'
@@ -26,18 +34,26 @@ def default_profile_dir() -> Path:
     env = os.environ.get("ALTALAY_PROFILE")
     if env:
         return Path(env)
-    return Path.home() / ".config" / "altlay" / "profile"
+    from altlay.pool import vault_home
+    return vault_home() / "profile"
 
 
 class ChatGPT:
     def __init__(self, profile_dir: str | os.PathLike | None = None,
                  firefox_profile: str | os.PathLike | None = None,
                  viewport: dict | None = None,
-                 headless: bool = False) -> None:
+                 headless: bool = False,
+                 session: dict | None = None) -> None:
         self.profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.viewport = viewport or {"width": 1280, "height": 900}
         self.headless = headless
+        self.session = session
+
+    def _cookies(self) -> list[dict]:
+        if self.session is not None:
+            return self.session["cookies"]
+        return export_cookies(self.firefox_profile)
 
     async def generate(self, prompt: str, timeout: float = 300.0,
                        stream: bool = False) -> str:
@@ -45,17 +61,27 @@ class ChatGPT:
         ctx = await launch_persistent_context_async(
             self.profile_dir, headless=self.headless, humanize=True, viewport=self.viewport)
         try:
-            await ctx.add_cookies(export_cookies(self.firefox_profile))
+            await ctx.add_cookies(self._cookies())
             page = await ctx.new_page()
+            await arm_overlay_handlers(page)
             await page.goto("https://chatgpt.com/?temporary-chat=true",
                             wait_until="domcontentloaded")
             try:
-                await page.locator(COMPOSER).wait_for(state="visible", timeout=90_000)
+                await wait_for_composer(page, COMPOSER)
             except Exception:
-                raise RuntimeError(
-                    "not logged in: no chat composer found. "
-                    "Log into ChatGPT in Firefox, then retry.")
-            await fast_fill(page, COMPOSER, prompt)
+                try:
+                    login_visible = (
+                        await page.locator('a:has-text("Log in"), '
+                                           'button:has-text("Log in")').count() > 0)
+                except Exception:
+                    login_visible = False
+                if login_visible:
+                    raise AccountDead("session logged out in browser") from None
+                raise RateLimited(
+                    time.time() + 300,
+                    "cloudflare challenge did not clear; benched 5 min") from None
+            await disarm_overlay_handlers(page)
+            await enter_prompt(page, COMPOSER, prompt, instant=self.headless)
             await asyncio.sleep(0.3)
             await page.locator(SEND).click()
 
@@ -63,14 +89,18 @@ class ChatGPT:
             last_text, stable_since = "", time.time()
             while time.time() < deadline:
                 await asyncio.sleep(1)
+                msgs = page.locator(ASSISTANT)
+                cur = await msgs.last.inner_text() if await msgs.count() else ""
+                if not cur or (len(cur) < 300 and LIMIT_RE.search(cur)):
+                    # limit notice with no real answer (a short error bubble
+                    # also matches) — a genuine essay about limits won't.
+                    await _raise_if_limited(page)
                 stoppers = page.locator(STOP)
                 try:
                     generating = (await stoppers.count() > 0
                                   and await stoppers.first.is_visible())
                 except Exception:
                     generating = False
-                msgs = page.locator(ASSISTANT)
-                cur = await msgs.last.inner_text() if await msgs.count() else ""
                 if cur != last_text:
                     last_text, stable_since = cur, time.time()
                 out.update(cur)
@@ -80,6 +110,24 @@ class ChatGPT:
             raise TimeoutError("generation did not finish in time")
         finally:
             await ctx.close()
+
+
+LIMIT_RE = re.compile(
+    r"(reached|hit|exceeded).{0,60}(limit|quota)|usage limit|try again (later|at|until)",
+    re.IGNORECASE)
+
+
+async def _raise_if_limited(page) -> None:
+    try:
+        if await page.get_by_text(LIMIT_RE).count() == 0:
+            return
+        body = await page.locator("body").inner_text()
+    except Exception:
+        return
+    m = LIMIT_RE.search(body or "")
+    if m:
+        raise RateLimited(parse_reset_time(body),
+                          (body[m.start():m.start() + 160]).strip())
 
 
 async def generate(prompt: str, **kwargs) -> str:
