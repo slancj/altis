@@ -24,6 +24,7 @@ from altlay.ui import (  # noqa: E402
     arm_overlay_handlers,
     disarm_overlay_handlers,
     enter_prompt,
+    goto_with_retries,
 )
 
 COMPOSER = "textarea"
@@ -111,7 +112,7 @@ async def generate_browser(prompt: str,
             f"localStorage.setItem('userToken', {raw_token!r});")
         page = await ctx.new_page()
         await arm_overlay_handlers(page)
-        await page.goto("https://chat.deepseek.com/", wait_until="domcontentloaded")
+        await goto_with_retries(page, "https://chat.deepseek.com/")
         try:
             await page.locator(COMPOSER).wait_for(state="visible", timeout=90_000)
         except Exception:

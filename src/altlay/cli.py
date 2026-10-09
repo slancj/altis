@@ -60,6 +60,9 @@ def build_accounts_parser() -> argparse.ArgumentParser:
     chk = sub.add_parser("check", help="validity-probe stored accounts (no generation)")
     chk.add_argument("backend", nargs="?", choices=("chatgpt", "claude", "deepseek"))
 
+    ref = sub.add_parser("refresh", help="re-snapshot live Firefox sessions into matching vault entries")
+    ref.add_argument("backend", nargs="?", choices=("chatgpt", "claude", "deepseek"))
+
     imp = sub.add_parser("import", help="import a minimal pool JSON file")
     imp.add_argument("--file", required=True)
     return p
@@ -85,7 +88,8 @@ def build_attempt(backend: str, args):
         if backend == "chatgpt":
             from altlay.chatgpt import ChatGPT
             print(f"[altlay] {backend}/{name}", file=sys.stderr, flush=True)
-            return asyncio.run(ChatGPT(session=entry, **kwargs).generate(
+            return asyncio.run(ChatGPT(session=entry, account_name=name,
+                                       **kwargs).generate(
                 args.prompt, timeout=timeout, stream=True))
         if backend == "claude":
             from altlay.claude import Claude
@@ -188,8 +192,13 @@ def accounts_main(args) -> None:
         accounts_add(args)
         return
     if action == "remove":
+        from altlay import accounts as A
+        doomed = [e for e in A.entries(args.backend) if e["name"] == args.name]
         A.remove_entry(args.backend, args.name)
-        print(f"removed {args.backend}/{args.name}")
+        for e in doomed:
+            if e.get("email"):
+                A.add_ignore(e["email"])
+        print(f"removed {args.backend}/{args.name} (email ignored on refresh)")
         return
     if action == "rename":
         A.rename_entry(args.backend, args.old, args.new)
@@ -226,6 +235,10 @@ def accounts_main(args) -> None:
                 print(f"{b}/{e['name']}: {'OK' if ok else 'DEAD'} ({info})")
                 failed = failed or not ok
         raise SystemExit(1 if failed else 0)
+    if action == "refresh":
+        backends = [args.backend] if args.backend else None
+        n_upd, n_new = accounts_refresh(backends)
+        print(f"refreshed {n_upd}, added {n_new}")
     if action == "import":
         n = accounts_import(args.file)
         print(f"imported {n} account(s)")
@@ -263,28 +276,65 @@ def accounts_add(args) -> None:
 
 
 def _store_snapshot(args, item: dict) -> None:
+    action = upsert_snapshot(item, getattr(args, "name", None))
+    print(action)
+
+
+def upsert_snapshot(item: dict, name: str | None = None) -> str:
+    """File a live snapshot: update the entry with the same email, else add.
+    Ignored emails and anonymous dead sessions are skipped."""
     from altlay import accounts as A
     backend = item["backend"]
     email = A.IDENTIFY[backend](item)
+    if email and email in A.get_ignored():
+        return f"skip {backend}: {email} ignored"
+    for e in A.entries(backend):
+        if email and e.get("email") == email:
+            A.update_session(backend, e["name"], _session_material(item))
+            ok, info = A.check_account(backend, A.get_entry(backend, e["name"]))
+            return (f"updated {backend}/{e['name']}  email={email or '?'}  "
+                    f"check={'OK' if ok else 'DEAD: ' + info}")
+    if not email:
+        probe = dict(item)
+        ok, info = A.check_account(backend, {**probe, "name": "?", "email": None,
+                                             **_session_material(probe)})
+        if not ok:
+            return f"skip {backend}/c{item['container']}: anonymous dead session"
     taken = [e["name"] for e in A.entries(backend)]
-    if email and any(e.get("email") == email for e in A.entries(backend)):
-        print(f"skip {backend}: {email} already vaulted")
-        return
-    name = args.name or A.suggest_alias(
-        email, taken, f"{backend}-c{item['container']}")
-    entry = {"name": name, "email": email, "added_at": _now_iso(),
-             "source": f"firefox:{item['profile']}#c{item['container']}"}
-    if backend == "deepseek":
-        entry.update({"userToken": item["userToken"], "device_id": item.get("device_id")})
-    else:
-        entry["cookies"] = item["cookies"]
+    alias = name or A.suggest_alias(email, taken, f"{backend}-c{item['container']}")
+    entry = {"name": alias, "email": email, "added_at": _now_iso(),
+             "source": f"firefox:{item['profile']}#c{item['container']}",
+             **_session_material(item)}
     try:
         A.add_entry(backend, entry)
     except ValueError as e:
-        print(f"skip: {e}")
-        return
+        return f"skip: {e}"
     ok, info = A.check_account(backend, entry)
-    print(f"added {backend}/{name}  email={email or '?'}  check={'OK' if ok else 'DEAD: ' + info}")
+    return (f"added {backend}/{alias}  email={email or '?'}  "
+            f"check={'OK' if ok else 'DEAD: ' + info}")
+
+
+def _session_material(item: dict) -> dict:
+    if item["backend"] == "deepseek":
+        return {"userToken": item["userToken"], "device_id": item.get("device_id")}
+    return {"cookies": item["cookies"]}
+
+
+def accounts_refresh(backends: list[str] | None = None) -> tuple[int, int]:
+    from altlay import accounts as A
+    found = A.snapshot_firefox()
+    upd = new = 0
+    for item in found:
+        if backends and item["backend"] not in backends:
+            continue
+        before = len(A.entries(item["backend"]))
+        msg = upsert_snapshot(item)
+        print(msg)
+        if msg.startswith("updated"):
+            upd += 1
+        elif msg.startswith("added"):
+            new += 1
+    return upd, new
 
 
 def _now_iso() -> str:

@@ -22,6 +22,7 @@ from altlay.ui import (  # noqa: E402
     arm_overlay_handlers,
     disarm_overlay_handlers,
     enter_prompt,
+    goto_with_retries,
 )
 
 DOMAINS = ("claude.ai", "anthropic.com")
@@ -74,7 +75,7 @@ async def generate_browser(prompt: str,
         await ctx.add_cookies(cookies)
         page = await ctx.new_page()
         await arm_overlay_handlers(page)
-        await page.goto("https://claude.ai/new", wait_until="domcontentloaded")
+        await goto_with_retries(page, "https://claude.ai/new")
         try:
             await page.locator(COMPOSER).wait_for(state="visible", timeout=90_000)
         except Exception:

@@ -40,6 +40,13 @@ def entries(backend: str) -> list[dict]:
     return load_vault().get(backend, [])
 
 
+def get_entry(backend: str, name: str) -> dict:
+    for e in entries(backend):
+        if e["name"] == name:
+            return e
+    raise KeyError(f"no {backend} account {name!r}")
+
+
 def add_entry(backend: str, entry: dict) -> None:
     vault = load_vault()
     pool = vault.setdefault(backend, [])
@@ -66,6 +73,20 @@ def rename_entry(backend: str, old: str, new: str) -> None:
             save_vault(vault)
             return
     raise KeyError(f"no {backend} account {old!r}")
+
+
+def update_session(backend: str, name: str, session: dict) -> None:
+    """Replace stored session material (self-heal after manual re-login)."""
+    import datetime
+    vault = load_vault()
+    for e in vault.get(backend, []):
+        if e["name"] == name:
+            e.update(session)
+            e["added_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+            e["source"] = (e.get("source") or "") + " +relogin"
+            save_vault(vault)
+            return
+    raise KeyError(f"no {backend} account {name!r}")
 
 
 def suggest_alias(email: str | None, taken: list[str], fallback: str) -> str:
@@ -97,20 +118,42 @@ def get_default(backend: str) -> str | None:
     return load_config().get("default_account", {}).get(backend)
 
 
-def set_default(backend: str, name: str) -> None:
-    cfg = load_config()
-    cfg.setdefault("default_account", {})[backend] = name
+def _write_config(cfg: dict) -> None:
     home = vault_home()
     home.mkdir(parents=True, mode=0o700, exist_ok=True)
-    lines = ["[default_account]"]
-    for k, v in cfg.get("default_account", {}).items():
-        lines.append(f'{k} = "{v}"')
+    lines = []
+    if cfg.get("default_account"):
+        lines.append("[default_account]")
+        for k, v in cfg["default_account"].items():
+            lines.append(f'{k} = "{v}"')
+    if cfg.get("ignore", {}).get("emails"):
+        lines.append("[ignore]")
+        emails = ", ".join(f'"{e}"' for e in cfg["ignore"]["emails"])
+        lines.append(f"emails = [{emails}]")
     p = _config_path()
-    p.write_text("\n".join(lines) + "\n")
+    p.write_text("\n".join(lines) + "\n" if lines else "")
     try:
         os.chmod(p, 0o600)
     except OSError:
         pass
+
+
+def set_default(backend: str, name: str) -> None:
+    cfg = load_config()
+    cfg.setdefault("default_account", {})[backend] = name
+    _write_config(cfg)
+
+
+def get_ignored() -> list[str]:
+    return load_config().get("ignore", {}).get("emails", [])
+
+
+def add_ignore(email: str) -> None:
+    cfg = load_config()
+    ignored = cfg.setdefault("ignore", {}).setdefault("emails", [])
+    if email and email not in ignored:
+        ignored.append(email)
+    _write_config(cfg)
 
 
 def resolve_name(backend: str, pinned: str | None = None) -> str | None:

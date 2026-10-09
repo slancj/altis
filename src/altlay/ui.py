@@ -48,8 +48,8 @@ async def enter_prompt(page, selector: str, text: str, instant: bool = False) ->
         await fast_fill(page, selector, text)
         return
     loc = page.locator(selector)
-    await loc.click()
-    await loc.type(text)
+    await loc.click(timeout=15000)
+    await loc.type(text, timeout=15000)
 
 
 class Streamer:
@@ -131,6 +131,19 @@ async def disarm_overlay_handlers(page) -> None:
                 page.get_by_role("button", name=text))
         except Exception:
             pass
+
+
+async def goto_with_retries(page, url: str, tries: int = 3) -> None:
+    """Goto with retries for flaky networks (net::ERR_ABORTED etc.)."""
+    last = None
+    for _ in range(tries):
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            return
+        except Exception as e:
+            last = e
+            await asyncio.sleep(2)
+    raise last
 
 
 async def _cdp_turnstile_boxes(page) -> list[dict]:

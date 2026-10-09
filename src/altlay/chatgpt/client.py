@@ -21,6 +21,7 @@ from altlay.ui import (  # noqa: E402
     arm_overlay_handlers,
     disarm_overlay_handlers,
     enter_prompt,
+    goto_with_retries,
     wait_for_composer,
 )
 
@@ -43,12 +44,14 @@ class ChatGPT:
                  firefox_profile: str | os.PathLike | None = None,
                  viewport: dict | None = None,
                  headless: bool = False,
-                 session: dict | None = None) -> None:
+                 session: dict | None = None,
+                 account_name: str | None = None) -> None:
         self.profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
         self.firefox_profile = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
         self.viewport = viewport or {"width": 1280, "height": 900}
         self.headless = headless
         self.session = session
+        self.account_name = account_name
 
     def _cookies(self) -> list[dict]:
         if self.session is not None:
@@ -64,15 +67,19 @@ class ChatGPT:
             await ctx.add_cookies(self._cookies())
             page = await ctx.new_page()
             await arm_overlay_handlers(page)
-            await page.goto("https://chatgpt.com/?temporary-chat=true",
-                            wait_until="domcontentloaded")
+            await goto_with_retries(
+                page, "https://chatgpt.com/?temporary-chat=true")
             try:
                 await wait_for_composer(page, COMPOSER)
             except Exception:
                 try:
-                    login_visible = (
-                        await page.locator('a:has-text("Log in"), '
-                                           'button:has-text("Log in")').count() > 0)
+                    expired = await page.locator(
+                        '[data-testid="modal-expired-session"]').count() > 0
+                    login_visible = expired or await page.locator(
+                        'a:has-text("Log in"), button:has-text("Log in")').count() > 0
+                    if not login_visible:
+                        body = await page.locator("body").inner_text()
+                        login_visible = "log in again" in body.lower()
                 except Exception:
                     login_visible = False
                 if login_visible:
@@ -81,9 +88,19 @@ class ChatGPT:
                     time.time() + 300,
                     "cloudflare challenge did not clear; benched 5 min") from None
             await disarm_overlay_handlers(page)
-            await enter_prompt(page, COMPOSER, prompt, instant=self.headless)
-            await asyncio.sleep(0.3)
-            await page.locator(SEND).click()
+            if await _modal_present(page):
+                await _heal_or_die(page, ctx, self.account_name)
+            for _ in range(2):
+                try:
+                    await enter_prompt(page, COMPOSER, prompt, instant=self.headless)
+                    await asyncio.sleep(0.3)
+                    await page.locator(SEND).click()
+                    break
+                except Exception:
+                    if await _modal_present(page):
+                        await _heal_or_die(page, ctx, self.account_name)
+                        continue
+                    raise
 
             deadline = time.time() + timeout
             last_text, stable_since = "", time.time()
@@ -115,6 +132,43 @@ class ChatGPT:
 LIMIT_RE = re.compile(
     r"(reached|hit|exceeded).{0,60}(limit|quota)|usage limit|try again (later|at|until)",
     re.IGNORECASE)
+
+
+async def _modal_present(page) -> bool:
+    try:
+        if await page.locator('[data-testid="modal-expired-session"]').count():
+            return True
+        body = await page.locator("body").inner_text()
+        return "log in again" in body.lower()
+    except Exception:
+        return False
+
+
+async def _heal_or_die(page, ctx, account_name: str | None) -> None:
+    """Expired-session modal: a present user re-logs in inside the visible
+    window and the vault entry self-heals; otherwise AccountDead."""
+    import sys
+    if account_name is None or not sys.stdin.isatty():
+        raise AccountDead("session expired (re-login needs a terminal)") from None
+    print(f"[altlay] {account_name}: session expired — log in again in the "
+          f"browser window, then press Enter here. (Ctrl-C aborts)",
+          flush=True)
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        raise AccountDead("re-login aborted") from None
+    if await _modal_present(page):
+        raise AccountDead("still expired after re-login") from None
+    try:
+        from altlay.accounts import update_session
+        cookies = [c for c in await ctx.cookies()
+                   if c["domain"].endswith("chatgpt.com")
+                   or c["domain"].endswith("openai.com")]
+        if cookies:
+            update_session("chatgpt", account_name, {"cookies": cookies})
+            print("[altlay] vault entry refreshed", flush=True)
+    except Exception as e:
+        print(f"[altlay] vault refresh failed: {e}", flush=True)
 
 
 async def _raise_if_limited(page) -> None:
