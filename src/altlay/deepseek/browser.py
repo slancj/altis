@@ -120,7 +120,7 @@ async def generate_browser(prompt: str,
                 "not logged in: no DeepSeek composer found. "
                 "Log into DeepSeek in Firefox, then retry.")
         await disarm_overlay_handlers(page)
-        await enter_prompt(page, COMPOSER, prompt, instant=headless)
+        await enter_prompt(page, COMPOSER, prompt)
         await asyncio.sleep(0.3)
         await page.keyboard.press("Enter")
 

@@ -92,7 +92,7 @@ class ChatGPT:
                 await _heal_or_die(page, ctx, self.account_name)
             for _ in range(2):
                 try:
-                    await enter_prompt(page, COMPOSER, prompt, instant=self.headless)
+                    await enter_prompt(page, COMPOSER, prompt)
                     await asyncio.sleep(0.3)
                     await page.locator(SEND).click()
                     break

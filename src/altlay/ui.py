@@ -41,15 +41,9 @@ async def _contains(page, selector: str, text: str) -> bool:
         return False
 
 
-async def enter_prompt(page, selector: str, text: str, instant: bool = False) -> None:
-    """Headed: humanized per-character typing (visible in the window).
-    Headless: instant paste (fast)."""
-    if instant:
-        await fast_fill(page, selector, text)
-        return
-    loc = page.locator(selector)
-    await loc.click(timeout=15000)
-    await loc.type(text, timeout=15000)
+async def enter_prompt(page, selector: str, text: str) -> None:
+    """Paste the prompt instantly via the editing pipeline (headed or not)."""
+    await fast_fill(page, selector, text)
 
 
 class Streamer:

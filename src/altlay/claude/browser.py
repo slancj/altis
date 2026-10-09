@@ -83,7 +83,7 @@ async def generate_browser(prompt: str,
                 "not logged in: no Claude composer found. "
                 "Log into Claude in Firefox, then retry.")
         await disarm_overlay_handlers(page)
-        await enter_prompt(page, COMPOSER, prompt, instant=headless)
+        await enter_prompt(page, COMPOSER, prompt)
         await asyncio.sleep(0.3)
         await page.locator(SEND).click()
 
