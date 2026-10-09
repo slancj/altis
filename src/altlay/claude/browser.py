@@ -1,4 +1,4 @@
-"""Claude in a visible stealth browser (the `--headed` path)."""
+"""Claude in a stealth browser (headed by default)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ native.ensure_native_libs()
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
 from altlay.chatgpt.cookies import export_cookies  # noqa: E402
+from altlay.ui import Streamer, fast_fill  # noqa: E402
 
 DOMAINS = ("claude.ai", "anthropic.com")
 COMPOSER = 'div[contenteditable="true"]'
@@ -34,7 +35,9 @@ async def generate_browser(prompt: str,
                            firefox_profile: str | os.PathLike | None = None,
                            viewport: dict | None = None,
                            timeout: float = 300.0,
-                           headless: bool = False) -> str:
+                           headless: bool = False,
+                           stream: bool = False) -> str:
+    out = Streamer(stream)
     profile = Path(profile_dir) if profile_dir else default_profile_dir()
     ff = firefox_profile or os.environ.get("ALTALAY_FIREFOX_PROFILE")
     ctx = await launch_persistent_context_async(
@@ -51,16 +54,14 @@ async def generate_browser(prompt: str,
             raise RuntimeError(
                 "not logged in: no Claude composer found. "
                 "Log into Claude in Firefox, then retry.")
-        composer = page.locator(COMPOSER)
-        await composer.click()
-        await composer.fill(prompt)
-        await asyncio.sleep(1)
+        await fast_fill(page, COMPOSER, prompt)
+        await asyncio.sleep(0.3)
         await page.locator(SEND).click()
 
         deadline = time.time() + timeout
         last_text, stable_since = "", time.time()
         while time.time() < deadline:
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
             try:
                 send_label = await page.locator(SEND).get_attribute("aria-label") or ""
             except Exception:
@@ -70,12 +71,14 @@ async def generate_browser(prompt: str,
             cur = await msgs.last.inner_text() if await msgs.count() else ""
             if cur != last_text:
                 last_text, stable_since = cur, time.time()
-            if not busy and cur and time.time() - stable_since > 5:
+            out.update(cur)
+            if not busy and cur and time.time() - stable_since > 2.5:
                 try:
                     convo = urlparse(page.url).path.rsplit("/", 1)[-1]
                     _delete_conversation(ff, convo)
                 except Exception:
                     pass
+                out.finish(last_text)
                 return cur
         raise TimeoutError("generation did not finish in time")
     finally:

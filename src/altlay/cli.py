@@ -34,25 +34,26 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(2)
     if args.backend == "deepseek":
         from altlay.deepseek import DeepSeek
-        print(DeepSeek(firefox_profile=args.firefox_profile,
-                       timeout=args.timeout, headless=args.headless,
-                       profile_dir=args.profile).generate(args.prompt))
+        DeepSeek(firefox_profile=args.firefox_profile,
+                 timeout=args.timeout, headless=args.headless,
+                 profile_dir=args.profile, stream=True).generate(args.prompt)
     elif args.backend == "claude":
         from altlay.claude import Claude
         use_browser = args.headed or args.headless
-        print(Claude(firefox_profile=args.firefox_profile,
-                     model=args.model, timeout=args.timeout,
-                     transport="browser" if use_browser else "direct",
-                     headless=args.headless,
-                     profile_dir=args.profile).generate(args.prompt))
+        answer = Claude(firefox_profile=args.firefox_profile,
+                        model=args.model, timeout=args.timeout,
+                        transport="browser" if use_browser else "direct",
+                        headless=args.headless, stream=use_browser,
+                        profile_dir=args.profile).generate(args.prompt)
+        if not use_browser:
+            print(answer)
     else:
         from altlay.chatgpt import ChatGPT
-        answer = asyncio.run(ChatGPT(
+        asyncio.run(ChatGPT(
             profile_dir=args.profile,
             firefox_profile=args.firefox_profile,
             headless=args.headless,
-        ).generate(args.prompt, timeout=args.timeout))
-        print(answer)
+        ).generate(args.prompt, timeout=args.timeout, stream=True))
 
 
 if __name__ == "__main__":

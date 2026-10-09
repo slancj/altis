@@ -1,4 +1,4 @@
-"""Drive chatgpt.com in a visible stealth browser and return the answer text."""
+"""Drive chatgpt.com in a stealth browser (headed by default)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ native.ensure_native_libs()
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
 from altlay.chatgpt.cookies import export_cookies  # noqa: E402
+from altlay.ui import Streamer, fast_fill  # noqa: E402
 
 COMPOSER = "#prompt-textarea"
 SEND = '[data-testid="send-button"]'
@@ -38,7 +39,9 @@ class ChatGPT:
         self.viewport = viewport or {"width": 1280, "height": 900}
         self.headless = headless
 
-    async def generate(self, prompt: str, timeout: float = 300.0) -> str:
+    async def generate(self, prompt: str, timeout: float = 300.0,
+                       stream: bool = False) -> str:
+        out = Streamer(stream)
         ctx = await launch_persistent_context_async(
             self.profile_dir, headless=self.headless, humanize=True, viewport=self.viewport)
         try:
@@ -52,16 +55,14 @@ class ChatGPT:
                 raise RuntimeError(
                     "not logged in: no chat composer found. "
                     "Log into ChatGPT in Firefox, then retry.")
-            composer = page.locator(COMPOSER)
-            await composer.click()
-            await composer.fill(prompt)
-            await asyncio.sleep(1)
+            await fast_fill(page, COMPOSER, prompt)
+            await asyncio.sleep(0.3)
             await page.locator(SEND).click()
 
             deadline = time.time() + timeout
             last_text, stable_since = "", time.time()
             while time.time() < deadline:
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
                 stoppers = page.locator(STOP)
                 try:
                     generating = (await stoppers.count() > 0
@@ -72,8 +73,10 @@ class ChatGPT:
                 cur = await msgs.last.inner_text() if await msgs.count() else ""
                 if cur != last_text:
                     last_text, stable_since = cur, time.time()
-                if not generating and cur and time.time() - stable_since > 4:
-                    return cur
+                out.update(cur)
+                if not generating and cur and time.time() - stable_since > 2.5:
+                    out.finish(last_text)
+                    return last_text
             raise TimeoutError("generation did not finish in time")
         finally:
             await ctx.close()

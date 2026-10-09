@@ -1,4 +1,4 @@
-"""DeepSeek in a visible stealth browser."""
+"""DeepSeek in a stealth browser (headed by default)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ native.ensure_native_libs()
 from cloakbrowser import launch_persistent_context_async  # noqa: E402
 
 from altlay.deepseek.storage import find_session  # noqa: E402
+from altlay.ui import Streamer, fast_fill  # noqa: E402
 
 COMPOSER = "textarea"
 ANSWER_JS = """() => {
@@ -63,7 +64,9 @@ async def generate_browser(prompt: str,
                            firefox_profile: str | os.PathLike | None = None,
                            viewport: dict | None = None,
                            timeout: float = 300.0,
-                           headless: bool = False) -> str:
+                           headless: bool = False,
+                           stream: bool = False) -> str:
+    out = Streamer(stream)
     profile = Path(profile_dir) if profile_dir else default_profile_dir()
     raw_token = _raw_user_token(firefox_profile)
     ctx = await launch_persistent_context_async(
@@ -80,27 +83,27 @@ async def generate_browser(prompt: str,
             raise RuntimeError(
                 "not logged in: no DeepSeek composer found. "
                 "Log into DeepSeek in Firefox, then retry.")
-        composer = page.locator(COMPOSER)
-        await composer.click()
-        await composer.fill(prompt)
-        await asyncio.sleep(1)
+        await fast_fill(page, COMPOSER, prompt)
+        await asyncio.sleep(0.3)
         await page.keyboard.press("Enter")
 
         deadline = time.time() + timeout
         last_text, stable_since = "", time.time()
         while time.time() < deadline:
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
             texts = await page.evaluate(ANSWER_JS)
             cur = (texts[-1].strip() if texts else "")
             if cur != last_text:
                 last_text, stable_since = cur, time.time()
-            if cur and time.time() - stable_since > 5:
+            out.update(cur)
+            if cur and time.time() - stable_since > 2.5:
                 try:
                     convo = urlparse(page.url).path.rstrip("/").rsplit("/", 1)[-1]
                     if convo not in ("", "chat.deepseek.com"):
                         _delete_conversation(firefox_profile, convo)
                 except Exception:
                     pass
+                out.finish(last_text)
                 return cur
         raise TimeoutError("generation did not finish in time")
     finally:
